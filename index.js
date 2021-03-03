@@ -20,43 +20,27 @@ const io = socket(server, {
   },
 });
 
-const queue = [];
 io.on("connection", (socket) => {
   console.log(socket.id, "Made new connection");
 
+  const roomId = socket.handshake.query.roomId;
+  console.log(`Room ID retrieved from ${socket.id}: ${roomId}`);
+  socket.join(roomId);
+
   socket.on("disconnect", (data) => {
     console.log(socket.id, "has disconnected");
+    socket.leave(roomId);
   });
 
-  if (queue.length === 0) {
-    queue.push(socket);
-  } else {
-    const roomId = uuid();
-    console.log("Created room", roomId);
+  socket.on("draw", (data) => {
+    const rooms = socket.rooms.values();
+    for (const room of rooms)
+      socket.to(room).emit("draw", data);
+  });
 
-    const users = [socket, queue.shift()];
-    users.forEach((user) => {
-      user.join(roomId);
-      console.log("User", user.id, "was added to", roomId);
-
-      user.on("draw", (data) => {
-        console.log("Received data for draw from", user.id);
-
-        const rooms = user.rooms.values();
-        for (const roomId of rooms) {
-          user.to(roomId).emit("draw", data);
-        }
-      });
-
-      user.on("changedCode", (data) => {
-        console.log("Received data for changedCode from", user.id);
-
-        const rooms = user.rooms.values();
-        for (const roomId of rooms) {
-          user.to(roomId).emit("changedCode", data);
-        }
-      });
-    });
-  }
+  socket.on("changedCode", (data) => {
+    const rooms = socket.rooms.values();
+    for (const room of rooms)
+      socket.to(room).emit("changedCode", data);
+  });
 });
-
