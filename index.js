@@ -36,11 +36,12 @@ io.on("connection", (socket) => {
     socket.leave(roomId);
   });
 
-  socket.on("enter", (roomid) => {
-    const clients = io.sockets.adapter.rooms.get(roomid);
-    const x = [...clients];
-    //console.log("socket rooms values ", x);
-    socket.emit("enter", x);
+  socket.on("membersRequest", (data) => {
+    const roomId = data.roomId;
+    const members = io.sockets.adapter.rooms.get(roomId);
+    socket.emit("membersResponse", {
+      members: [...members]
+    });
   });
 
   socket.on("draw", (data) => {
