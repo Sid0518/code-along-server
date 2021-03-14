@@ -36,18 +36,23 @@ io.on("connection", (socket) => {
     socket.leave(roomId);
   });
 
+  socket.on("enter", (roomid) => {
+    const clients = io.sockets.adapter.rooms.get(roomid);
+    const x = [...clients];
+    //console.log("socket rooms values ", x);
+    socket.emit("enter", x);
+  });
+
   socket.on("draw", (data) => {
     const rooms = socket.rooms.values();
     for (const room of rooms)
-      if(room !== socket.id)
-        socket.to(room).emit("draw", data);
+      if (room !== socket.id) socket.to(room).emit("draw", data);
   });
 
   socket.on("changedCode", (data) => {
     const rooms = socket.rooms.values();
     for (const room of rooms)
-      if(room !== socket.id)
-        socket.to(room).emit("changedCode", data);
+      if (room !== socket.id) socket.to(room).emit("changedCode", data);
   });
 
   socket.on("executeCode", (data) => {
@@ -55,35 +60,33 @@ io.on("connection", (socket) => {
     const lang = data.lang;
 
     const rooms = socket.rooms.values();
-    for(const room of rooms) {
-      if(room !== socket.id)
-        execute_code(code, lang, socket, room);
+    for (const room of rooms) {
+      if (room !== socket.id) execute_code(code, lang, socket, room);
     }
-  })
+  });
 });
 
 const EXTENSIONS = {
-  "python": "py",
-  "javascript": "js",
+  python: "py",
+  javascript: "js",
 };
 
 const execute_code = async (code, lang, socket, room) => {
   const codeFile = room;
   const ext = EXTENSIONS[lang];
-  
+
   // const codeLocation = path.join("received_codes", `${codeFile}.${ext}`);
   const codeLocation = `${codeFile}.${ext}`;
   fs.writeFile(codeLocation, code, (error) => {
-    if(error)
-      throw error;
+    if (error) throw error;
   });
 
   let command = "";
-  switch(lang) {
-    case("python"):
+  switch (lang) {
+    case "python":
       command = `python \"${codeLocation}\"`;
       break;
-    case("javascript"):
+    case "javascript":
       command = `node \"${codeLocation}\"`;
       break;
   }
@@ -92,16 +95,11 @@ const execute_code = async (code, lang, socket, room) => {
     socket.to(room).emit("codeOutput", {
       error: error,
       stderr: stderr,
-      stdout: stdout, 
+      stdout: stdout,
     });
 
-    if(error)
-      console.log(`error: ${error.message}`);
-        
-    else if(stderr)
-      console.log(`stderr: ${stderr}`);
-        
-    else
-      console.log(`stdout: ${stdout}`);
+    if (error) console.log(`error: ${error.message}`);
+    else if (stderr) console.log(`stderr: ${stderr}`);
+    else console.log(`stdout: ${stdout}`);
   });
-}
+};
