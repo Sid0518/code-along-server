@@ -26,6 +26,8 @@ const io = socket(server, {
   },
 });
 
+const roomData = {};
+const TIME_DELTA = 2000; // in milliseconds
 io.on("connection", (socket) => {
   console.log(socket.id, "Made new connection");
 
@@ -37,6 +39,7 @@ io.on("connection", (socket) => {
     socket,
     userName,
   };
+  if (!(roomId in roomData)) roomData[roomId] = {};
   console.log(
     `Room ID retrieved from ${socket.id}: ${roomId} with an alias of ${userName}`
   );
@@ -75,9 +78,31 @@ io.on("connection", (socket) => {
   });
 
   socket.on("changedCode", (data) => {
+    const timestamp = Date.now();
+
     const rooms = socket.rooms.values();
-    for (const room of rooms)
-      if (room !== socket.id) socket.to(room).emit("changedCode", data);
+    for (const room of rooms) {
+      if (room !== socket.id) {
+        const prevTimestamp = roomData[room].timestamp;
+        const prevClient = roomData[room].client;
+
+        //----------------------handle concurrency----------------------//
+        if (
+          prevTimestamp === undefined ||
+          timestamp - prevTimestamp > TIME_DELTA ||
+          socket.id === prevClient
+        ) {
+          roomData[room].timestamp = timestamp;
+          roomData[room].client = socket.id;
+          roomData[room].changedCodeData = data;
+          socket.to(room).emit("changedCode", data);
+        } else {
+          console.log("changedCode event was rejected");
+          socket.emit("changedCode", roomData[room].changedCodeData);
+        }
+        //-------------------------------------------------------------//
+      }
+    }
   });
 
   socket.on("executeCode", (data) => {
@@ -86,7 +111,7 @@ io.on("connection", (socket) => {
 
     const rooms = socket.rooms.values();
     for (const room of rooms) {
-      if (room !== socket.id) execute_code(code, lang, socket, room);
+      if (room !== socket.id) executeCode(code, lang, socket, room);
     }
   });
 });
@@ -96,7 +121,7 @@ const EXTENSIONS = {
   javascript: "js",
 };
 
-const execute_code = async (code, lang, socket, room) => {
+const executeCode = async (code, lang, socket, room) => {
   const codeFile = room;
   const ext = EXTENSIONS[lang];
 
