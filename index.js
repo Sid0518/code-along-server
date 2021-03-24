@@ -30,13 +30,13 @@ io.on("connection", (socket) => {
   console.log(socket.id, "Made new connection");
 
   const roomId = socket.handshake.query.roomId;
-  const userName = socket.handshake.query.userName;
+  let userName = socket.handshake.query.userName;
+  if (userName == "" || userName == "null") userName = null;
+
   store[socket.id] = {
     socket,
     userName,
   };
-  // socket.userName = userName;
-  // console.log(socket.userName);
   console.log(
     `Room ID retrieved from ${socket.id}: ${roomId} with an alias of ${userName}`
   );
@@ -48,12 +48,19 @@ io.on("connection", (socket) => {
     socket.leave(roomId);
   });
 
+  socket.on("explicitDisconnect", (data) => {
+    console.log(socket.id, "has disconnected");
+    delete store[socket.id];
+    socket.leave(roomId);
+  });
+
   socket.on("membersRequest", (data) => {
     const roomId = data.roomId;
     const members = io.sockets.adapter.rooms.get(roomId);
     let newList = [];
     members.forEach((member) => {
-      newList.push(store[member].userName);
+      if (store[member].userName == null) newList.push(store[member].socket.id);
+      else newList.push(store[member].userName);
     });
     console.log(newList);
     socket.emit("membersResponse", {
