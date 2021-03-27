@@ -33,11 +33,11 @@ io.on("connection", (socket) => {
 
   const roomId = socket.handshake.query.roomId;
   let userName = socket.handshake.query.userName;
-  if (userName == "" || userName == "null") userName = null;
 
   store[socket.id] = {
     socket,
     userName,
+    language: null,
   };
   if (!(roomId in roomData)) roomData[roomId] = {};
   console.log(
@@ -62,8 +62,7 @@ io.on("connection", (socket) => {
     const members = io.sockets.adapter.rooms.get(roomId);
     let newList = [];
     members.forEach((member) => {
-      if (store[member].userName == null) newList.push(store[member].socket.id);
-      else newList.push(store[member].userName);
+      newList.push(store[member].userName);
     });
     console.log(newList);
     socket.emit("membersResponse", {
@@ -75,6 +74,11 @@ io.on("connection", (socket) => {
     const rooms = socket.rooms.values();
     for (const room of rooms)
       if (room !== socket.id) socket.to(room).emit("draw", data);
+  });
+
+  socket.on("setLanguage", (data) => {
+    store[socket.id].language = data.language;
+    console.log(store[socket.id].language);
   });
 
   socket.on("changedCode", (data) => {
