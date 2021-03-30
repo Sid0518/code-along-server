@@ -137,16 +137,16 @@ const executeCode = async (code, lang, socket, room) => {
 
   let command = "";
   switch (lang) {
-    case "python":
+    case "Python":
       command = `python \"${codeLocation}\"`;
       break;
-    case "javascript":
+    case "JavaScript":
       command = `node \"${codeLocation}\"`;
       break;
   }
 
   exec(command, (error, stdout, stderr) => {
-    socket.to(room).emit("codeOutput", {
+    io.sockets.in(room).emit("codeOutput", {
       error: error,
       stderr: stderr,
       stdout: stdout,
