@@ -137,10 +137,10 @@ const executeCode = async (code, lang, socket, room) => {
 
   let command = "";
   switch (lang) {
-    case "Python":
+    case "python":
       command = `python \"${codeLocation}\"`;
       break;
-    case "JavaScript":
+    case "javascript":
       command = `node \"${codeLocation}\"`;
       break;
   }
