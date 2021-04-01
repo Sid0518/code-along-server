@@ -101,7 +101,7 @@ io.on("connection", (socket) => {
     for (const room of rooms) {
       if (room !== socket.id) {
         socket.emit("codeResponse", {
-          code: roomData[room].code[data.lang],
+          code: roomData[room].code[data.lang] ?? "",
         });
       }
     }
@@ -131,7 +131,10 @@ io.on("connection", (socket) => {
         
         else {
           console.log("changedCode event was rejected");
-          socket.emit("changedCode", roomData[room].code[data.lang]);
+          socket.emit("changedCode", {
+            code: roomData[room].code[data.lang],
+            lang: data.lang
+          });
         }
         //-------------------------------------------------------------//
       }
