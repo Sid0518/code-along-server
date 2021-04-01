@@ -4,7 +4,6 @@ const socket = require("socket.io");
 const path = require("path");
 const fs = require("fs");
 const { exec } = require("child_process");
-const { v4: uuid } = require("uuid");
 
 const app = express();
 app.get("/", (req, res) => res.send("Hello World!"));
@@ -33,17 +32,29 @@ io.on("connection", (socket) => {
 
   const roomId = socket.handshake.query.roomId;
   let userName = socket.handshake.query.userName;
+  console.log(
+    `Room ID retrieved from ${socket.id}: ${roomId} with an alias of ${userName}`
+  );
+  socket.join(roomId);
 
   store[socket.id] = {
     socket,
     userName,
     language: null,
   };
-  if (!(roomId in roomData)) roomData[roomId] = {};
-  console.log(
-    `Room ID retrieved from ${socket.id}: ${roomId} with an alias of ${userName}`
-  );
-  socket.join(roomId);
+
+  if (!(roomId in roomData)) 
+    roomData[roomId] = {
+      whiteboard: [],
+      code: {},
+      timestamp: {},
+      client: {}
+    };
+
+  socket.emit("roomState", {
+    whiteboard: roomData[roomId].whiteboard,
+    code: roomData[roomId].code
+  });
 
   socket.on("disconnect", (data) => {
     console.log(socket.id, "has disconnected");
@@ -60,11 +71,12 @@ io.on("connection", (socket) => {
   socket.on("membersRequest", (data) => {
     const roomId = data.roomId;
     const members = io.sockets.adapter.rooms.get(roomId);
+    
     let newList = [];
     members.forEach((member) => {
       newList.push(store[member].userName);
     });
-    console.log(newList);
+
     socket.emit("membersResponse", {
       members: [...newList],
     });
@@ -72,14 +84,28 @@ io.on("connection", (socket) => {
 
   socket.on("draw", (data) => {
     const rooms = socket.rooms.values();
-    for (const room of rooms)
-      if (room !== socket.id) socket.to(room).emit("draw", data);
+    for (const room of rooms) {
+      if (room !== socket.id) {
+        roomData[room].whiteboard.push(data);
+        socket.to(room).emit("draw", data);
+      }
+    }
   });
 
   socket.on("setLanguage", (data) => {
     store[socket.id].language = data.language;
-    console.log(store[socket.id].language);
   });
+
+  socket.on("codeRequest", (data) => {
+    const rooms = socket.rooms.values();
+    for (const room of rooms) {
+      if (room !== socket.id) {
+        socket.emit("codeResponse", {
+          code: roomData[room].code[data.lang],
+        });
+      }
+    }
+  })
 
   socket.on("changedCode", (data) => {
     const timestamp = Date.now();
@@ -87,8 +113,8 @@ io.on("connection", (socket) => {
     const rooms = socket.rooms.values();
     for (const room of rooms) {
       if (room !== socket.id) {
-        const prevTimestamp = roomData[room].timestamp;
-        const prevClient = roomData[room].client;
+        const prevTimestamp = roomData[room].timestamp[data.lang];
+        const prevClient = roomData[room].client[data.lang];
 
         //----------------------handle concurrency----------------------//
         if (
@@ -96,13 +122,16 @@ io.on("connection", (socket) => {
           timestamp - prevTimestamp > TIME_DELTA ||
           socket.id === prevClient
         ) {
-          roomData[room].timestamp = timestamp;
-          roomData[room].client = socket.id;
-          roomData[room].changedCodeData = data;
+          roomData[room].timestamp[data.lang] = timestamp;
+          roomData[room].client[data.lang] = socket.id;
+          roomData[room].code[data.lang] = data.code;
+          
           socket.to(room).emit("changedCode", data);
-        } else {
+        } 
+        
+        else {
           console.log("changedCode event was rejected");
-          socket.emit("changedCode", roomData[room].changedCodeData);
+          socket.emit("changedCode", roomData[room].code[data.lang]);
         }
         //-------------------------------------------------------------//
       }
@@ -114,9 +143,9 @@ io.on("connection", (socket) => {
     const lang = data.lang;
 
     const rooms = socket.rooms.values();
-    for (const room of rooms) {
-      if (room !== socket.id) executeCode(code, lang, socket, room);
-    }
+    for (const room of rooms)
+      if (room !== socket.id) 
+        executeCode(code, lang, room);
   });
 });
 
@@ -125,7 +154,7 @@ const EXTENSIONS = {
   javascript: "js",
 };
 
-const executeCode = async (code, lang, socket, room) => {
+const executeCode = async (code, lang, room) => {
   const codeFile = room;
   const ext = EXTENSIONS[lang];
 
