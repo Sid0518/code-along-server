@@ -126,12 +126,16 @@ io.on("connection", (socket) => {
           roomData[room].client[data.lang] = socket.id;
           roomData[room].code[data.lang] = data.code;
           
-          socket.to(room).emit("changedCode", data);
+          socket.to(room).emit("changedCode", {
+            userName: store[socket.id].userName,
+            ...data
+          });
         } 
         
         else {
           console.log("changedCode event was rejected");
           socket.emit("changedCode", {
+            userName: store[prevClient].userName,
             code: roomData[room].code[data.lang],
             lang: data.lang
           });
