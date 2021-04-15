@@ -28,6 +28,7 @@ const io = socket(server, {
 const roomData = {};
 const TIME_DELTA = 2000; // in milliseconds
 io.on("connection", (socket) => {
+  let memberListEmmited = false;
   console.log(socket.id, "Made new connection");
 
   const roomId = socket.handshake.query.roomId;
@@ -43,43 +44,50 @@ io.on("connection", (socket) => {
     language: null,
   };
 
-  if (!(roomId in roomData)) 
+  if (!(roomId in roomData))
     roomData[roomId] = {
       whiteboard: [],
       code: {},
       timestamp: {},
-      client: {}
+      client: {},
     };
 
   socket.emit("roomState", {
     whiteboard: roomData[roomId].whiteboard,
-    code: roomData[roomId].code
+    code: roomData[roomId].code,
   });
+
+  if (!memberListEmmited) {
+    const members = io.sockets.adapter.rooms.get(roomId);
+
+    let newList = {};
+    members.forEach((member) => {
+      newList[member] = store[member].userName;
+    });
+
+    socket.emit("newMember", { ...newList });
+    io.in(roomId).emit("newMember", { ...newList });
+    memberListEmmited = true;
+  }
 
   socket.on("disconnect", (data) => {
     console.log(socket.id, "has disconnected");
+    io.in(roomId).emit("memberLeave", {
+      id: socket.id,
+      userName: store[socket.id].userName,
+    });
     delete store[socket.id];
     socket.leave(roomId);
   });
 
   socket.on("explicitDisconnect", (data) => {
     console.log(socket.id, "has disconnected");
+    io.in(roomId).emit("memberLeave", {
+      id: socket.id,
+      userName: store[socket.id].userName,
+    });
     delete store[socket.id];
     socket.leave(roomId);
-  });
-
-  socket.on("membersRequest", (data) => {
-    const roomId = data.roomId;
-    const members = io.sockets.adapter.rooms.get(roomId);
-    
-    let newList = [];
-    members.forEach((member) => {
-      newList.push(store[member].userName);
-    });
-
-    socket.emit("membersResponse", {
-      members: [...newList],
-    });
   });
 
   socket.on("draw", (data) => {
@@ -100,12 +108,14 @@ io.on("connection", (socket) => {
     const rooms = socket.rooms.values();
     for (const room of rooms) {
       if (room !== socket.id) {
+        let code = roomData[room].code[data.lang];
+        if (code === null || code === undefined) code = "";
         socket.emit("codeResponse", {
-          code: roomData[room].code[data.lang] ?? "",
+          code,
         });
       }
     }
-  })
+  });
 
   socket.on("changedCode", (data) => {
     const timestamp = Date.now();
@@ -125,19 +135,17 @@ io.on("connection", (socket) => {
           roomData[room].timestamp[data.lang] = timestamp;
           roomData[room].client[data.lang] = socket.id;
           roomData[room].code[data.lang] = data.code;
-          
+
           socket.to(room).emit("changedCode", {
             userName: store[socket.id].userName,
-            ...data
+            ...data,
           });
-        } 
-        
-        else {
+        } else {
           console.log("changedCode event was rejected");
           socket.emit("changedCode", {
             userName: store[prevClient].userName,
             code: roomData[room].code[data.lang],
-            lang: data.lang
+            lang: data.lang,
           });
         }
         //-------------------------------------------------------------//
@@ -151,8 +159,7 @@ io.on("connection", (socket) => {
 
     const rooms = socket.rooms.values();
     for (const room of rooms)
-      if (room !== socket.id) 
-        executeCode(code, lang, room);
+      if (room !== socket.id) executeCode(code, lang, room);
   });
 });
 
