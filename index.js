@@ -70,24 +70,36 @@ io.on("connection", (socket) => {
     memberListEmmited = true;
   }
 
-  socket.on("disconnect", (data) => {
-    console.log(socket.id, "has disconnected");
-    io.in(roomId).emit("memberLeave", {
-      id: socket.id,
-      userName: store[socket.id].userName,
+  socket.on("messageSend", (data) => {
+    socket.emit("newMessage", { ...data, user: store[socket.id].userName });
+    io.in(roomId).emit("newMessage", {
+      ...data,
+      user: store[socket.id].userName,
     });
-    delete store[socket.id];
-    socket.leave(roomId);
+  });
+
+  socket.on("disconnect", (data) => {
+    if (socket.id !== null && socket.id) {
+      console.log(socket.id, "has disconnected");
+      io.in(roomId).emit("memberLeave", {
+        id: socket.id,
+        userName: store[socket.id].userName,
+      });
+      delete store[socket.id];
+      socket.leave(roomId);
+    }
   });
 
   socket.on("explicitDisconnect", (data) => {
-    console.log(socket.id, "has disconnected");
-    io.in(roomId).emit("memberLeave", {
-      id: socket.id,
-      userName: store[socket.id].userName,
-    });
-    delete store[socket.id];
-    socket.leave(roomId);
+    if (socket.id !== null && socket.id) {
+      console.log(socket.id, "has disconnected");
+      io.in(roomId).emit("memberLeave", {
+        id: socket.id,
+        userName: store[socket.id].userName,
+      });
+      delete store[socket.id];
+      socket.leave(roomId);
+    }
   });
 
   socket.on("draw", (data) => {
