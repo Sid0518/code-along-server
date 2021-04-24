@@ -1,9 +1,12 @@
 const express = require("express");
 const socket = require("socket.io");
+const fileUpload = require("express-fileupload");
 
 const path = require("path");
 const fs = require("fs");
 const { exec } = require("child_process");
+
+const uploadRouter = require("./upload");
 
 const app = express();
 app.get("/", (req, res) => res.send("Hello World!"));
@@ -13,7 +16,23 @@ const server = app.listen(port, () => {
   console.log(`Listening to port ${port}`);
 });
 
-app.use(express.static("public"));
+//following app.use is to bypass CORS(Cross-Origin-Resource-Sharing) Policy
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "http://localhost:3000"); // update to match the domain you will make the request from
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
+  next();
+});
+app.use(express.json());
+app.use(
+  fileUpload({
+    createParentPath: true,
+  })
+);
+// app.use(express.static("public"));
+app.use("/upload", uploadRouter);
 
 const store = {};
 
@@ -79,7 +98,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", (data) => {
-    if (socket.id !== null && socket.id) {
+    if (store[socket.id]) {
       console.log(socket.id, "has disconnected");
       io.in(roomId).emit("memberLeave", {
         id: socket.id,
@@ -91,7 +110,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("explicitDisconnect", (data) => {
-    if (socket.id !== null && socket.id) {
+    if (store[socket.id]) {
       console.log(socket.id, "has disconnected");
       io.in(roomId).emit("memberLeave", {
         id: socket.id,
