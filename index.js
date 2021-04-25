@@ -121,6 +121,23 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("filesList", (data) => {
+    const filesList = [];
+    console.log("From FilesList event");
+    const folderLocation = `${__dirname}/files/${roomId}`;
+    if (fs.existsSync(folderLocation)) {
+      fs.readdir(folderLocation, (err, files) => {
+        if (err) console.log(`Error Occured while Reading Dir ${roomID}`);
+        else filesList.push(...files);
+        console.log(files);
+        io.in(roomId).emit("newFilesList", files);
+      });
+    } else {
+      console.log(filesList);
+      io.in(roomId).emit("newFilesList", filesList);
+    }
+  });
+
   socket.on("draw", (data) => {
     const rooms = socket.rooms.values();
     for (const room of rooms) {
