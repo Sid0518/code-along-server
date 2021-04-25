@@ -96,7 +96,7 @@ io.on("connection", (socket) => {
   }
 
   socket.on("messageSend", (data) => {
-    socket.emit("newMessage", { ...data, user: store[socket.id].userName });
+    // socket.emit("newMessage", { ...data, user: store[socket.id].userName });
     io.in(roomId).emit("newMessage", {
       ...data,
       user: store[socket.id].userName,
