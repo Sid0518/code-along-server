@@ -7,6 +7,7 @@ const fs = require("fs");
 const { exec } = require("child_process");
 
 const uploadRouter = require("./upload");
+const downloadRouter = require("./download");
 
 const app = express();
 app.get("/", (req, res) => res.send("Hello World!"));
@@ -23,6 +24,10 @@ app.use((req, res, next) => {
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept"
   );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PATCH, PUT, DELETE, OPTIONS"
+  );
   next();
 });
 app.use(express.json());
@@ -33,6 +38,7 @@ app.use(
 );
 // app.use(express.static("public"));
 app.use("/upload", uploadRouter);
+app.use("/download", downloadRouter);
 
 const store = {};
 
