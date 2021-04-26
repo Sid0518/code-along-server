@@ -31,11 +31,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
-app.use(
-  fileUpload({
-    createParentPath: true,
-  })
-);
+app.use(fileUpload());
 // app.use(express.static("public"));
 app.use("/upload", uploadRouter);
 app.use("/download", downloadRouter);
@@ -52,6 +48,7 @@ const io = socket(server, {
 
 const roomData = {};
 const TIME_DELTA = 2000; // in milliseconds
+const commonDir = `${__dirname}/files`;
 io.on("connection", (socket) => {
   let memberListEmmited = false;
   console.log(socket.id, "Made new connection");
@@ -69,13 +66,17 @@ io.on("connection", (socket) => {
     language: null,
   };
 
-  if (!(roomId in roomData))
+  if (!(roomId in roomData)) {
     roomData[roomId] = {
       whiteboard: [],
       code: {},
       timestamp: {},
       client: {},
     };
+    fs.mkdir(`${commonDir}/${roomId}`, (err) => {
+      if (err) console.log(err);
+    });
+  }
 
   socket.emit("roomState", {
     whiteboard: roomData[roomId].whiteboard,
@@ -130,18 +131,19 @@ io.on("connection", (socket) => {
   socket.on("filesList", (data) => {
     const filesList = [];
     console.log("From FilesList event");
-    const folderLocation = `${__dirname}/files/${roomId}`;
+    const folderLocation = `${commonDir}/${roomId}`;
+
     if (fs.existsSync(folderLocation)) {
-      fs.readdir(folderLocation, (err, files) => {
-        if (err) console.log(`Error Occured while Reading Dir ${roomID}`);
-        else filesList.push(...files);
-        console.log(files);
-        io.in(roomId).emit("newFilesList", files);
-      });
-    } else {
-      console.log(filesList);
-      io.in(roomId).emit("newFilesList", filesList);
+      filesList.push(
+        ...fs.readdirSync(folderLocation).filter((file) => {
+          const regex = new RegExp(`^${roomId}`);
+          if (!file.match(regex)) return file;
+        })
+      );
     }
+
+    console.log(filesList);
+    io.in(roomId).emit("newFilesList", filesList);
   });
 
   socket.on("draw", (data) => {
@@ -227,7 +229,7 @@ const executeCode = async (code, lang, room) => {
   const ext = EXTENSIONS[lang];
 
   // const codeLocation = path.join("received_codes", `${codeFile}.${ext}`);
-  const codeLocation = `${codeFile}.${ext}`;
+  const codeLocation = `${commonDir}/${codeFile}/${codeFile}.${ext}`;
   fs.writeFile(codeLocation, code, (error) => {
     if (error) throw error;
   });
