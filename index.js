@@ -1,5 +1,6 @@
 const express = require("express");
 const socket = require("socket.io");
+const cors = require("cors");
 const fileUpload = require("express-fileupload");
 
 const path = require("path");
@@ -18,18 +19,12 @@ const server = app.listen(port, () => {
 });
 
 //following app.use is to bypass CORS(Cross-Origin-Resource-Sharing) Policy
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "http://localhost:3000"); // update to match the domain you will make the request from
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
-  );
-  res.header(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PATCH, PUT, DELETE, OPTIONS"
-  );
-  next();
-});
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+  })
+);
+
 app.use(express.json());
 app.use(fileUpload());
 // app.use(express.static("public"));
