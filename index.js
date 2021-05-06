@@ -240,7 +240,53 @@ const executeCode = async (code, lang, room) => {
 }
 
 const compileAndExecute = (codeFile, lang, room) => {
-  emitCodeOutput(room, '', "Execution of " + lang + " code has not been implemented yet", '');
+  const roomFolder = `${commonDir}/${room}`;
+
+  let compileCommand = "";
+  let outFile = `${roomFolder}/${Date.now()}.exe`;
+
+  switch (lang) {
+    case "c":
+      compileCommand = `gcc \"${codeFile}\" -o \"${outFile}\"`;
+      break;
+    case "cpp":
+      compileCommand = `g++ \"${codeFile}\" -o \"${outFile}\"`;
+      break;
+    case "java":
+      compileCommand = `javac \"${codeFile}\"`;
+      break;
+  }
+
+  console.log("Compile command", compileCommand);
+
+  exec(
+    compileCommand, 
+    (error, stdout, stderr) => {
+      if (error) {
+        console.log("Compilation error");
+        emitCodeOutput(room, error, stdout, stderr);
+      }
+      
+      else {
+        let executeCommand = "";
+        switch (lang) {
+          case "c":
+          case "cpp":
+            executeCommand = `\"${outFile}\"`;
+            break;
+          case "java":
+            executeCommand = `java \"${codeFile}\"`;
+            break;
+        }
+
+        exec(
+          executeCommand, 
+          (error, stdout, stderr) => 
+            emitCodeOutput(room, error, stdout, stderr)
+        );
+      }
+    }
+  );
 }
 
 const directlyExecute = (codeFile, lang, room) => {
