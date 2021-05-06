@@ -27,7 +27,6 @@ app.use(
 
 app.use(express.json());
 app.use(fileUpload());
-// app.use(express.static("public"));
 app.use("/upload", uploadRouter);
 app.use("/download", downloadRouter);
 
@@ -44,6 +43,7 @@ const io = socket(server, {
 const roomData = {};
 const TIME_DELTA = 2000; // in milliseconds
 const commonDir = `${__dirname}/files`;
+
 io.on("connection", (socket) => {
   let memberListEmmited = false;
   console.log(socket.id, "Made new connection");
@@ -68,8 +68,11 @@ io.on("connection", (socket) => {
       timestamp: {},
       client: {},
     };
-    fs.mkdir(`${commonDir}/${roomId}`, (err) => {
-      if (err) console.log(err);
+
+    const roomFolder = path.join(commonDir, roomId);
+    fs.mkdir(roomFolder, (error) => {
+      if (error) 
+        console.log("Could not create folder for room " + roomId + " due to the following error: " + error);
     });
   }
 
@@ -92,7 +95,6 @@ io.on("connection", (socket) => {
   }
 
   socket.on("messageSend", (data) => {
-    // socket.emit("newMessage", { ...data, user: store[socket.id].userName });
     io.in(roomId).emit("newMessage", {
       ...data,
       user: store[socket.id].userName,
@@ -191,7 +193,9 @@ io.on("connection", (socket) => {
             userName: store[socket.id].userName,
             ...data,
           });
-        } else {
+        } 
+        
+        else {
           console.log("changedCode event was rejected");
           socket.emit("changedCode", {
             userName: store[prevClient].userName,
@@ -223,10 +227,10 @@ const EXTENSIONS = {
 };
 
 const executeCode = async (code, lang, room) => {
-  const roomFolder = `${commonDir}/${room}`;
+  const roomFolder = path.join(commonDir, room);
   const ext = EXTENSIONS[lang];
 
-  const codeFile = `${roomFolder}/main.${ext}`;
+  const codeFile = path.join(roomFolder, `main.${ext}`);
   fs.writeFile(codeFile, code, (error) => {
     if (error) 
       throw error;
@@ -240,10 +244,10 @@ const executeCode = async (code, lang, room) => {
 }
 
 const compileAndExecute = (codeFile, lang, room) => {
-  const roomFolder = `${commonDir}/${room}`;
+  const roomFolder = path.join(commonDir, room);
 
   let compileCommand = "";
-  let outFile = `${roomFolder}/${Date.now()}.exe`;
+  let outFile = path.join(roomFolder, `${Date.now()}.exe`);
 
   switch (lang) {
     case "c":
@@ -253,11 +257,9 @@ const compileAndExecute = (codeFile, lang, room) => {
       compileCommand = `g++ \"${codeFile}\" -o \"${outFile}\"`;
       break;
     case "java":
-      compileCommand = `javac \"${codeFile}\"`;
+      compileCommand = `javac \"${codeFile}\" -verbose`;
       break;
   }
-
-  console.log("Compile command", compileCommand);
 
   exec(
     compileCommand, 
@@ -274,15 +276,22 @@ const compileAndExecute = (codeFile, lang, room) => {
           case "cpp":
             executeCommand = `\"${outFile}\"`;
             break;
+
           case "java":
-            executeCommand = `java \"${codeFile}\"`;
+            const match = stderr.match(/\[wrote RegularFileObject\[(?:.*\\)*([^\\]*)\.class\]\]/);
+            const classFile = match[1];
+            executeCommand = `java -cp \"${roomFolder}\"; ${classFile}"`;
+
+            outFile = path.join(roomFolder, `${classFile}.class`);
             break;
         }
 
         exec(
           executeCommand, 
-          (error, stdout, stderr) => 
-            emitCodeOutput(room, error, stdout, stderr)
+          (error, stdout, stderr) => {
+            emitCodeOutput(room, error, stdout, stderr);
+            deleteFile(outFile);
+          }
         );
       }
     }
@@ -317,4 +326,14 @@ const emitCodeOutput = (room, error, stdout, stderr) => {
   // if (error) console.log(`error: ${error.message}`);
   // else if (stderr) console.log(`stderr: ${stderr}`);
   // else console.log(`stdout: ${stdout}`);
+}
+
+const deleteFile = (file) => {
+  exec(
+    `del /f \"${file}\"`,
+    (error, stdout, stderr) => {
+      if (error)
+        console.log("Could not delete " + file + " due to following error: " + error);
+    }
+  );
 }
