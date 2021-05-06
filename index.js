@@ -215,39 +215,60 @@ io.on("connection", (socket) => {
 });
 
 const EXTENSIONS = {
-  python: "py",
-  javascript: "js",
+  "python": "py",
+  "javascript": "js",
+  "c": "c",
+  "cpp": "cpp",
+  "java": "java",
 };
 
 const executeCode = async (code, lang, room) => {
-  const codeFile = room;
+  const roomFolder = `${commonDir}/${room}`;
   const ext = EXTENSIONS[lang];
 
-  // const codeLocation = path.join("received_codes", `${codeFile}.${ext}`);
-  const codeLocation = `${commonDir}/${codeFile}/${codeFile}.${ext}`;
-  fs.writeFile(codeLocation, code, (error) => {
-    if (error) throw error;
+  const codeFile = `${roomFolder}/main.${ext}`;
+  fs.writeFile(codeFile, code, (error) => {
+    if (error) 
+      throw error;
   });
 
+  if (["c", "cpp", "java"].includes(lang))
+    compileAndExecute(codeFile, lang, room);
+
+  else 
+    directlyExecute(codeFile, lang, room);
+}
+
+const compileAndExecute = (codeFile, lang, room) => {
+  emitCodeOutput(room, '', "Execution of " + lang + " code has not been implemented yet", '');
+}
+
+const directlyExecute = (codeFile, lang, room) => {
   let command = "";
   switch (lang) {
     case "python":
-      command = `python \"${codeLocation}\"`;
+      command = `python \"${codeFile}\"`;
       break;
     case "javascript":
-      command = `node \"${codeLocation}\"`;
+      command = `node \"${codeFile}\"`;
       break;
   }
 
-  exec(command, (error, stdout, stderr) => {
-    io.sockets.in(room).emit("codeOutput", {
-      error: error,
-      stderr: stderr,
-      stdout: stdout,
-    });
+  exec(
+    command, 
+    (error, stdout, stderr) => 
+      emitCodeOutput(room, error, stdout, stderr)
+  );
+}
 
-    if (error) console.log(`error: ${error.message}`);
-    else if (stderr) console.log(`stderr: ${stderr}`);
-    else console.log(`stdout: ${stdout}`);
+const emitCodeOutput = (room, error, stdout, stderr) => {
+  io.sockets.in(room).emit("codeOutput", {
+    error: error,
+    stderr: stderr,
+    stdout: stdout,
   });
-};
+
+  // if (error) console.log(`error: ${error.message}`);
+  // else if (stderr) console.log(`stderr: ${stderr}`);
+  // else console.log(`stdout: ${stdout}`);
+}
