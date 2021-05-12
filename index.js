@@ -143,7 +143,7 @@ io.on("connection", (socket) => {
         })
       );
     }
-    
+
     io.in(roomId).emit("newFilesList", filesList);
   });
 
@@ -155,10 +155,6 @@ io.on("connection", (socket) => {
         socket.to(room).emit("draw", data);
       }
     }
-  });
-
-  socket.on("setLanguage", (data) => {
-    store[socket.id].language = data.language;
   });
 
   socket.on("codeRequest", (data) => {
