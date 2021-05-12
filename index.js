@@ -44,55 +44,57 @@ const roomData = {};
 const TIME_DELTA = 2000; // in milliseconds
 const commonDir = `${__dirname}/files`;
 
+function initializeRoom(roomId) {
+  roomData[roomId] = {
+    whiteboard: [],
+    code: {},
+    timestamp: {},
+    client: {},
+  };
+
+  const roomFolder = path.join(commonDir, roomId);
+  fs.mkdir(roomFolder, (error) => {
+    if (error)
+      console.log("Could not create folder for room " + roomId + " due to the following error: " + error);
+  });
+}
+
+function resetRoomDeletion(roomId) {
+  const timeout = roomData[roomId].deletionTimeout;
+  if (timeout !== undefined) {
+    clearTimeout(timeout);
+    delete roomData[roomId].deletionTimeout;
+    console.log("Cleared timeout");
+  }
+}
+
 io.on("connection", (socket) => {
-  let memberListEmmited = false;
   console.log(socket.id, "Made new connection");
 
   const roomId = socket.handshake.query.roomId;
-  let userName = socket.handshake.query.userName;
-  console.log(
-    `Room ID retrieved from ${socket.id}: ${roomId} with an alias of ${userName}`
-  );
+  const userName = socket.handshake.query.userName;
   socket.join(roomId);
+  console.log(`${socket.id} joined ${roomId} with a username of ${userName}`);
 
   store[socket.id] = {
-    socket,
     userName,
     language: null,
   };
 
-  if (!(roomId in roomData)) {
-    roomData[roomId] = {
-      whiteboard: [],
-      code: {},
-      timestamp: {},
-      client: {},
-    };
-
-    const roomFolder = path.join(commonDir, roomId);
-    fs.mkdir(roomFolder, (error) => {
-      if (error) 
-        console.log("Could not create folder for room " + roomId + " due to the following error: " + error);
-    });
-  }
+  if(roomId in roomData)
+    resetRoomDeletion(roomId);
+  else
+    initializeRoom(roomId);
 
   socket.emit("roomState", {
     whiteboard: roomData[roomId].whiteboard,
     code: roomData[roomId].code,
   });
 
-  if (!memberListEmmited) {
-    const members = io.sockets.adapter.rooms.get(roomId);
-
-    let newList = {};
-    members.forEach((member) => {
-      newList[member] = store[member].userName;
-    });
-
-    socket.emit("newMember", { ...newList });
-    io.in(roomId).emit("newMember", { ...newList });
-    memberListEmmited = true;
-  }
+  const memberIds = io.sockets.adapter.rooms.get(roomId);
+  const members = {};
+  memberIds.forEach(id => members[id] = store[id].userName);
+  io.in(roomId).emit("newMember", members);
 
   socket.on("messageSend", (data) => {
     io.in(roomId).emit("newMessage", {
@@ -101,33 +103,36 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("disconnect", (data) => {
+  function handleDisconnect(socketData) {
     if (store[socket.id]) {
       console.log(socket.id, "has disconnected");
-      io.in(roomId).emit("memberLeave", {
-        id: socket.id,
-        userName: store[socket.id].userName,
-      });
-      delete store[socket.id];
-      socket.leave(roomId);
-    }
-  });
 
-  socket.on("explicitDisconnect", (data) => {
-    if (store[socket.id]) {
-      console.log(socket.id, "has disconnected");
       io.in(roomId).emit("memberLeave", {
         id: socket.id,
         userName: store[socket.id].userName,
       });
-      delete store[socket.id];
       socket.leave(roomId);
+      delete store[socket.id];
+
+      const members = io.sockets.adapter.rooms.get(roomId);
+      if (members === undefined) {
+        console.log("Room", roomId, "is now empty");
+        roomData[roomId].deletionTimeout = setTimeout(() => {
+          delete roomData[roomId];
+          const folder = path.join(commonDir, roomId);
+          deleteFolder(folder);
+
+          console.log("Room", roomId, "was deleted");
+        }, 10000);
+      }
     }
-  });
+  }
+
+  socket.on("disconnect", handleDisconnect);
+  socket.on("explicitDisconnect", handleDisconnect);
 
   socket.on("filesList", (data) => {
     const filesList = [];
-    console.log("From FilesList event");
     const folderLocation = `${commonDir}/${roomId}`;
 
     if (fs.existsSync(folderLocation)) {
@@ -138,8 +143,7 @@ io.on("connection", (socket) => {
         })
       );
     }
-
-    console.log(filesList);
+    
     io.in(roomId).emit("newFilesList", filesList);
   });
 
@@ -326,6 +330,16 @@ const emitCodeOutput = (room, error, stdout, stderr) => {
   // if (error) console.log(`error: ${error.message}`);
   // else if (stderr) console.log(`stderr: ${stderr}`);
   // else console.log(`stdout: ${stdout}`);
+}
+
+const deleteFolder = (folder) => {
+  exec(
+    `rmdir \"${folder}\"`,
+    (error, stdout, stderr) => {
+      if (error)
+        console.log("Could not delete " + folder + " due to following error: " + error);
+    }
+  );
 }
 
 const deleteFile = (file) => {
