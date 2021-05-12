@@ -42,7 +42,8 @@ const io = socket(server, {
 
 const roomData = {};
 const TIME_DELTA = 2000; // in milliseconds
-const commonDir = `${__dirname}/files`;
+const filesDir = `${__dirname}/files`;
+const codesDir = `${__dirname}/codes`;
 
 function initializeRoom(roomId) {
   roomData[roomId] = {
@@ -52,10 +53,16 @@ function initializeRoom(roomId) {
     client: {},
   };
 
-  const roomFolder = path.join(commonDir, roomId);
-  fs.mkdir(roomFolder, (error) => {
+  const roomFiles = path.join(filesDir, roomId);
+  fs.mkdir(roomFiles, (error) => {
     if (error)
-      console.log("Could not create folder for room " + roomId + " due to the following error: " + error);
+      console.log("Could not create files folder for room " + roomId + " due to the following error: " + error);
+  });
+
+  const roomCodes = path.join(codesDir, roomId);
+  fs.mkdir(roomCodes, (error) => {
+    if (error)
+      console.log("Could not create codes folder for room " + roomId + " due to the following error: " + error);
   });
 }
 
@@ -64,7 +71,7 @@ function resetRoomDeletion(roomId) {
   if (timeout !== undefined) {
     clearTimeout(timeout);
     delete roomData[roomId].deletionTimeout;
-    console.log("Cleared timeout");
+    console.log("Cleared room deletion timeout");
   }
 }
 
@@ -117,13 +124,18 @@ io.on("connection", (socket) => {
       const members = io.sockets.adapter.rooms.get(roomId);
       if (members === undefined) {
         console.log("Room", roomId, "is now empty");
+
+        const DELETION_DURATION = 24*60*60*1000; // 24 hrs
         roomData[roomId].deletionTimeout = setTimeout(() => {
           delete roomData[roomId];
-          const folder = path.join(commonDir, roomId);
+
+          let folder = path.join(filesDir, roomId);
+          deleteFolder(folder);
+          folder = path.join(codesDir, roomId);
           deleteFolder(folder);
 
           console.log("Room", roomId, "was deleted");
-        }, 10000);
+        }, DELETION_DURATION);
       }
     }
   }
@@ -133,16 +145,11 @@ io.on("connection", (socket) => {
 
   socket.on("filesList", (data) => {
     const filesList = [];
-    const folderLocation = `${commonDir}/${roomId}`;
+    const folderLocation = `${filesDir}/${roomId}`;
 
-    if (fs.existsSync(folderLocation)) {
-      filesList.push(
-        ...fs.readdirSync(folderLocation).filter((file) => {
-          const regex = new RegExp(`^${roomId}`);
-          if (!file.match(regex)) return file;
-        })
-      );
-    }
+    if (fs.existsSync(folderLocation))
+      fs.readdirSync(folderLocation)
+        .forEach(file => filesList.push(file));
 
     io.in(roomId).emit("newFilesList", filesList);
   });
@@ -152,6 +159,8 @@ io.on("connection", (socket) => {
     for (const room of rooms) {
       if (room !== socket.id) {
         roomData[room].whiteboard.push(data);
+
+        // BROADCAST emit - Event is NOT sent to the socket itself
         socket.to(room).emit("draw", data);
       }
     }
@@ -162,7 +171,9 @@ io.on("connection", (socket) => {
     for (const room of rooms) {
       if (room !== socket.id) {
         let code = roomData[room].code[data.lang];
-        if (code === null || code === undefined) code = "";
+        if (code === null || code === undefined)
+          code = "";
+
         socket.emit("codeResponse", {
           code,
         });
@@ -189,6 +200,7 @@ io.on("connection", (socket) => {
           roomData[room].client[data.lang] = socket.id;
           roomData[room].code[data.lang] = data.code;
 
+          // BROADCAST emit - Event is NOT sent to the socket itself
           socket.to(room).emit("changedCode", {
             userName: store[socket.id].userName,
             ...data,
@@ -214,7 +226,8 @@ io.on("connection", (socket) => {
 
     const rooms = socket.rooms.values();
     for (const room of rooms)
-      if (room !== socket.id) executeCode(code, lang, room);
+      if (room !== socket.id)
+        executeCode(code, lang, room);
   });
 });
 
@@ -227,7 +240,7 @@ const EXTENSIONS = {
 };
 
 const executeCode = async (code, lang, room) => {
-  const roomFolder = path.join(commonDir, room);
+  const roomFolder = path.join(codesDir, room);
   const ext = EXTENSIONS[lang];
 
   const codeFile = path.join(roomFolder, `main.${ext}`);
@@ -238,13 +251,12 @@ const executeCode = async (code, lang, room) => {
 
   if (["c", "cpp", "java"].includes(lang))
     compileAndExecute(codeFile, lang, room);
-
-  else 
+  else
     directlyExecute(codeFile, lang, room);
 }
 
 const compileAndExecute = (codeFile, lang, room) => {
-  const roomFolder = path.join(commonDir, room);
+  const roomFolder = path.join(codesDir, room);
 
   let compileCommand = "";
   let outFile = path.join(roomFolder, `${Date.now()}.exe`);
