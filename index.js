@@ -54,13 +54,13 @@ function initializeRoom(roomId) {
   };
 
   const roomFiles = path.join(filesDir, roomId);
-  fs.mkdir(roomFiles, (error) => {
+  fs.mkdirSync(roomFiles, {recursive: true}, (error) => {
     if (error)
       console.log("Could not create files folder for room " + roomId + " due to the following error: " + error);
   });
 
   const roomCodes = path.join(codesDir, roomId);
-  fs.mkdir(roomCodes, (error) => {
+  fs.mkdirSync(roomCodes, {recursive: true}, (error) => {
     if (error)
       console.log("Could not create codes folder for room " + roomId + " due to the following error: " + error);
   });
@@ -341,21 +341,17 @@ const emitCodeOutput = (room, error, stdout, stderr) => {
 }
 
 const deleteFolder = (folder) => {
-  exec(
-    `rmdir \"${folder}\"`,
-    (error, stdout, stderr) => {
+  if (fs.existsSync(folder))
+    fs.rmdirSync(folder, {recursive: true}, (error) => {
       if (error)
-        console.log("Could not delete " + folder + " due to following error: " + error);
-    }
-  );
+        console.log(folder + " could not be deleted due to an error - " + error);
+    });
 }
 
 const deleteFile = (file) => {
-  exec(
-    `del /f \"${file}\"`,
-    (error, stdout, stderr) => {
-      if (error)
-        console.log("Could not delete " + file + " due to following error: " + error);
+  fs.unlink(file, (error) => {
+    if (error)
+      console.log("Could not delete " + file + " due to following error: " + error);
     }
   );
 }
