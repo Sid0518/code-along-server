@@ -13,7 +13,9 @@ const downloadRouter = require("./download");
 const app = express();
 app.get("/", (req, res) => res.send("Hello World!"));
 
-const port = 4000;
+const port = process.env.PORT || 4000;
+const client = process.env.CLIENT || "http://localhost:3000";
+
 const server = app.listen(port, () => {
   console.log(`Listening to port ${port}`);
 });
@@ -21,7 +23,7 @@ const server = app.listen(port, () => {
 //following app.use is to bypass CORS(Cross-Origin-Resource-Sharing) Policy
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: client,
   })
 );
 
@@ -34,7 +36,6 @@ const store = {};
 
 const io = socket(server, {
   cors: {
-    origin: "*",
     credentials: true,
     methods: ["GET", "POST"],
   },
@@ -54,15 +55,25 @@ function initializeRoom(roomId) {
   };
 
   const roomFiles = path.join(filesDir, roomId);
-  fs.mkdirSync(roomFiles, {recursive: true}, (error) => {
+  fs.mkdirSync(roomFiles, { recursive: true }, (error) => {
     if (error)
-      console.log("Could not create files folder for room " + roomId + " due to the following error: " + error);
+      console.log(
+        "Could not create files folder for room " +
+          roomId +
+          " due to the following error: " +
+          error
+      );
   });
 
   const roomCodes = path.join(codesDir, roomId);
-  fs.mkdirSync(roomCodes, {recursive: true}, (error) => {
+  fs.mkdirSync(roomCodes, { recursive: true }, (error) => {
     if (error)
-      console.log("Could not create codes folder for room " + roomId + " due to the following error: " + error);
+      console.log(
+        "Could not create codes folder for room " +
+          roomId +
+          " due to the following error: " +
+          error
+      );
   });
 }
 
@@ -88,10 +99,8 @@ io.on("connection", (socket) => {
     language: null,
   };
 
-  if(roomId in roomData)
-    resetRoomDeletion(roomId);
-  else
-    initializeRoom(roomId);
+  if (roomId in roomData) resetRoomDeletion(roomId);
+  else initializeRoom(roomId);
 
   socket.emit("roomState", {
     whiteboard: roomData[roomId].whiteboard,
@@ -100,7 +109,7 @@ io.on("connection", (socket) => {
 
   const memberIds = io.sockets.adapter.rooms.get(roomId);
   const members = {};
-  memberIds.forEach(id => members[id] = store[id].userName);
+  memberIds.forEach((id) => (members[id] = store[id].userName));
   io.in(roomId).emit("newMember", members);
 
   socket.on("messageSend", (data) => {
@@ -125,7 +134,7 @@ io.on("connection", (socket) => {
       if (members === undefined) {
         console.log("Room", roomId, "is now empty");
 
-        const DELETION_DURATION = 24*60*60*1000; // 24 hrs
+        const DELETION_DURATION = 24 * 60 * 60 * 1000; // 24 hrs
         roomData[roomId].deletionTimeout = setTimeout(() => {
           delete roomData[roomId];
 
@@ -148,8 +157,7 @@ io.on("connection", (socket) => {
     const folderLocation = `${filesDir}/${roomId}`;
 
     if (fs.existsSync(folderLocation))
-      fs.readdirSync(folderLocation)
-        .forEach(file => filesList.push(file));
+      fs.readdirSync(folderLocation).forEach((file) => filesList.push(file));
 
     io.in(roomId).emit("newFilesList", filesList);
   });
@@ -171,8 +179,7 @@ io.on("connection", (socket) => {
     for (const room of rooms) {
       if (room !== socket.id) {
         let code = roomData[room].code[data.lang];
-        if (code === null || code === undefined)
-          code = "";
+        if (code === null || code === undefined) code = "";
 
         socket.emit("codeResponse", {
           code,
@@ -205,9 +212,7 @@ io.on("connection", (socket) => {
             userName: store[socket.id].userName,
             ...data,
           });
-        } 
-        
-        else {
+        } else {
           console.log("changedCode event was rejected");
           socket.emit("changedCode", {
             userName: store[prevClient].userName,
@@ -226,17 +231,16 @@ io.on("connection", (socket) => {
 
     const rooms = socket.rooms.values();
     for (const room of rooms)
-      if (room !== socket.id)
-        executeCode(code, lang, room);
+      if (room !== socket.id) executeCode(code, lang, room);
   });
 });
 
 const EXTENSIONS = {
-  "python": "py",
-  "javascript": "js",
-  "c": "c",
-  "cpp": "cpp",
-  "java": "java",
+  python: "py",
+  javascript: "js",
+  c: "c",
+  cpp: "cpp",
+  java: "java",
 };
 
 const executeCode = async (code, lang, room) => {
@@ -245,15 +249,13 @@ const executeCode = async (code, lang, room) => {
 
   const codeFile = path.join(roomFolder, `main.${ext}`);
   fs.writeFile(codeFile, code, (error) => {
-    if (error) 
-      throw error;
+    if (error) throw error;
   });
 
   if (["c", "cpp", "java"].includes(lang))
     compileAndExecute(codeFile, lang, room);
-  else
-    directlyExecute(codeFile, lang, room);
-}
+  else directlyExecute(codeFile, lang, room);
+};
 
 const compileAndExecute = (codeFile, lang, room) => {
   const roomFolder = path.join(codesDir, room);
@@ -273,42 +275,36 @@ const compileAndExecute = (codeFile, lang, room) => {
       break;
   }
 
-  exec(
-    compileCommand, 
-    (error, stdout, stderr) => {
-      if (error) {
-        console.log("Compilation error");
+  exec(compileCommand, (error, stdout, stderr) => {
+    if (error) {
+      console.log("Compilation error");
+      emitCodeOutput(room, error, stdout, stderr);
+    } else {
+      let executeCommand = "";
+      switch (lang) {
+        case "c":
+        case "cpp":
+          executeCommand = `\"${outFile}\"`;
+          break;
+
+        case "java":
+          const match = stderr.match(
+            /\[wrote RegularFileObject\[(?:.*\\)*([^\\]*)\.class\]\]/
+          );
+          const classFile = match[1];
+          executeCommand = `java -cp \"${roomFolder}\"; ${classFile}"`;
+
+          outFile = path.join(roomFolder, `${classFile}.class`);
+          break;
+      }
+
+      exec(executeCommand, (error, stdout, stderr) => {
         emitCodeOutput(room, error, stdout, stderr);
-      }
-      
-      else {
-        let executeCommand = "";
-        switch (lang) {
-          case "c":
-          case "cpp":
-            executeCommand = `\"${outFile}\"`;
-            break;
-
-          case "java":
-            const match = stderr.match(/\[wrote RegularFileObject\[(?:.*\\)*([^\\]*)\.class\]\]/);
-            const classFile = match[1];
-            executeCommand = `java -cp \"${roomFolder}\"; ${classFile}"`;
-
-            outFile = path.join(roomFolder, `${classFile}.class`);
-            break;
-        }
-
-        exec(
-          executeCommand, 
-          (error, stdout, stderr) => {
-            emitCodeOutput(room, error, stdout, stderr);
-            deleteFile(outFile);
-          }
-        );
-      }
+        deleteFile(outFile);
+      });
     }
-  );
-}
+  });
+};
 
 const directlyExecute = (codeFile, lang, room) => {
   let command = "";
@@ -321,12 +317,10 @@ const directlyExecute = (codeFile, lang, room) => {
       break;
   }
 
-  exec(
-    command, 
-    (error, stdout, stderr) => 
-      emitCodeOutput(room, error, stdout, stderr)
+  exec(command, (error, stdout, stderr) =>
+    emitCodeOutput(room, error, stdout, stderr)
   );
-}
+};
 
 const emitCodeOutput = (room, error, stdout, stderr) => {
   io.sockets.in(room).emit("codeOutput", {
@@ -338,20 +332,23 @@ const emitCodeOutput = (room, error, stdout, stderr) => {
   // if (error) console.log(`error: ${error.message}`);
   // else if (stderr) console.log(`stderr: ${stderr}`);
   // else console.log(`stdout: ${stdout}`);
-}
+};
 
 const deleteFolder = (folder) => {
   if (fs.existsSync(folder))
-    fs.rmdirSync(folder, {recursive: true}, (error) => {
+    fs.rmdirSync(folder, { recursive: true }, (error) => {
       if (error)
-        console.log(folder + " could not be deleted due to an error - " + error);
+        console.log(
+          folder + " could not be deleted due to an error - " + error
+        );
     });
-}
+};
 
 const deleteFile = (file) => {
   fs.unlink(file, (error) => {
     if (error)
-      console.log("Could not delete " + file + " due to following error: " + error);
-    }
-  );
-}
+      console.log(
+        "Could not delete " + file + " due to following error: " + error
+      );
+  });
+};
